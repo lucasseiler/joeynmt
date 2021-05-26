@@ -203,7 +203,8 @@ class _DataParallel(nn.DataParallel):
 
 def build_model(cfg: dict = None,
                 src_vocab: Vocabulary = None,
-                trg_vocab: Vocabulary = None) -> Model:
+                trg_vocab: Vocabulary = None,
+                enc_active_layers: list = []) -> Model:
     """
     Build and initialize the model according to the configuration.
 
@@ -244,7 +245,8 @@ def build_model(cfg: dict = None,
 
         encoder = TransformerEncoder(**cfg["encoder"],
                                      emb_size=src_embed.embedding_dim,
-                                     emb_dropout=enc_emb_dropout)
+                                     emb_dropout=enc_emb_dropout,
+                                     enc_active_layers=enc_active_layers)
     else:
         encoder = RecurrentEncoder(**cfg["encoder"],
                                    emb_size=src_embed.embedding_dim,

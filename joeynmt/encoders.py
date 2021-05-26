@@ -2,12 +2,16 @@
 
 import torch
 import torch.nn as nn
+import random
 from torch import Tensor
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import logging
 
 from joeynmt.helpers import freeze_params
 from joeynmt.transformer_layers import \
     TransformerEncoderLayer, PositionalEncoding
+
+logger = logging.getLogger(__name__)
 
 
 #pylint: disable=abstract-method
@@ -162,6 +166,8 @@ class TransformerEncoder(Encoder):
                  dropout: float = 0.1,
                  emb_dropout: float = 0.1,
                  freeze: bool = False,
+                 layerdrop: float = 0.0,
+                 enc_active_layers: list = [],
                  **kwargs):
         """
         Initializes the Transformer.
@@ -173,6 +179,8 @@ class TransformerEncoder(Encoder):
         :param dropout: dropout probability for Transformer layers
         :param emb_dropout: Is applied to the input (word embeddings).
         :param freeze: freeze the parameters of the encoder during training
+        :param layerdrop: layerdrop probability for the encoder layer
+        :param enc_active_layers: active encoder layers during during inference
         :param kwargs:
         """
         super().__init__()
@@ -186,8 +194,15 @@ class TransformerEncoder(Encoder):
         self.layer_norm = nn.LayerNorm(hidden_size, eps=1e-6)
         self.pe = PositionalEncoding(hidden_size)
         self.emb_dropout = nn.Dropout(p=emb_dropout)
+        self.layerdrop = layerdrop
 
         self._output_size = hidden_size
+
+        num_layers = len(self.layers)
+        if not enc_active_layers:  # if enc_active_layers does not contain any layers, use all layers
+            self.enc_active_layers = list(range(num_layers))
+        else:
+            self.enc_active_layers = enc_active_layers
 
         if freeze:
             freeze_params(self)
@@ -218,8 +233,14 @@ class TransformerEncoder(Encoder):
         x = self.pe(embed_src)  # add position encoding to word embeddings
         x = self.emb_dropout(x)
 
-        for layer in self.layers:
-            x = layer(x, mask)
+        n_list = []
+
+        for n, layer in enumerate(self.layers):
+            dropout_probability = random.uniform(0, 1)
+            if (self.training and dropout_probability > self.layerdrop) or (not self.training and n in self.enc_active_layers):
+                x = layer(x, mask)
+                n_list.append(n)
+        logger.info(f"layers active: {n_list}")
         return self.layer_norm(x), None
 
     def __repr__(self):

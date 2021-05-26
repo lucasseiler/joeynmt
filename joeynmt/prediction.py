@@ -228,6 +228,7 @@ def parse_test_args(cfg, mode="test"):
         beam_alpha = cfg["testing"].get("alpha", -1)
         postprocess = cfg["testing"].get("postprocess", True)
         bpe_type = cfg["testing"].get("bpe_type", "subword-nmt")
+        enc_active_layers = cfg["testing"].get("active_layers", [])
         sacrebleu = {"remove_whitespace": True, "tokenize": "13a"}
         if "sacrebleu" in cfg["testing"].keys():
             sacrebleu["remove_whitespace"] = cfg["testing"]["sacrebleu"] \
@@ -240,6 +241,7 @@ def parse_test_args(cfg, mode="test"):
         beam_alpha = -1
         postprocess = True
         bpe_type = "subword-nmt"
+        enc_active_layers = []
         sacrebleu = {"remove_whitespace": True, "tokenize": "13a"}
 
     decoding_description = "Greedy decoding" if beam_size < 2 else \
@@ -250,7 +252,7 @@ def parse_test_args(cfg, mode="test"):
 
     return batch_size, batch_type, use_cuda, device, n_gpu, level, \
            eval_metric, max_output_length, beam_size, beam_alpha, \
-           postprocess, bpe_type, sacrebleu, decoding_description, \
+           postprocess, bpe_type, sacrebleu, enc_active_layers, decoding_description, \
            tokenizer_info
 
 
@@ -300,14 +302,16 @@ def test(cfg_file,
     # parse test args
     batch_size, batch_type, use_cuda, device, n_gpu, level, eval_metric, \
         max_output_length, beam_size, beam_alpha, postprocess, \
-        bpe_type, sacrebleu, decoding_description, tokenizer_info \
+        bpe_type, sacrebleu, enc_active_layers, decoding_description, tokenizer_info, \
         = parse_test_args(cfg, mode="test")
 
     # load model state from disk
     model_checkpoint = load_checkpoint(ckpt, use_cuda=use_cuda)
 
     # build model and load parameters into it
-    model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
+    model = build_model(
+        cfg["model"], src_vocab=src_vocab, 
+        trg_vocab=trg_vocab, enc_active_layers=enc_active_layers)
     model.load_state_dict(model_checkpoint["model_state"])
 
     if use_cuda:
@@ -394,7 +398,7 @@ def translate(cfg_file: str,
         tmp_name = "tmp"
         tmp_suffix = ".src"
         tmp_filename = tmp_name+tmp_suffix
-        with open(tmp_filename, "w", encoding="utf-8") as tmp_file:
+        with open(tmp_filename, "w") as tmp_file:
             tmp_file.write("{}\n".format(line))
 
         test_data = MonoDataset(path=tmp_name, ext=tmp_suffix,
@@ -451,13 +455,15 @@ def translate(cfg_file: str,
     # parse test args
     batch_size, batch_type, use_cuda, device, n_gpu, level, _, \
         max_output_length, beam_size, beam_alpha, postprocess, \
-        bpe_type, sacrebleu, _, _ = parse_test_args(cfg, mode="translate")
+        bpe_type, sacrebleu, enc_active_layers, _, _ = parse_test_args(cfg, mode="translate")
 
     # load model state from disk
     model_checkpoint = load_checkpoint(ckpt, use_cuda=use_cuda)
 
     # build model and load parameters into it
-    model = build_model(cfg["model"], src_vocab=src_vocab, trg_vocab=trg_vocab)
+    model = build_model(
+        cfg["model"], src_vocab=src_vocab, 
+        trg_vocab=trg_vocab, enc_active_layers=enc_active_layers)
     model.load_state_dict(model_checkpoint["model_state"])
 
     if use_cuda:
